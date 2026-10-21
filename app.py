@@ -2,11 +2,13 @@
 =============================================================================
 File Name   : app.py
 Project     : Rise of Kingdoms (ROK) Kingdom Account Management System
+Version     : 1.1
 Author      : ROK Kingdom Management Team
 Created     : 2026-10-21
 Description : Flask core server application providing REST APIs for player 
               searches, farm bindings/unbindings, and administrative 
-              hierarchy dashboards.
+              hierarchy dashboards. Updated v1.1 to support native CSV column 
+              headers directly imported into Supabase.
 =============================================================================
 """
 
@@ -87,8 +89,16 @@ def search_gov(gov_id):
             'msg': 'Farm account detected, redirected to main. / 该账号为农场号，已自动跳转至主账号。'
         })
 
-    # 2. 查询主账号信息
-    gov = execute_query('SELECT * FROM governors WHERE id = ?', (gov_id,), fetchone=True)
+    # 2. 查询主账号信息（兼容 Supabase 包含空格/大写的 CSV 字段名）
+    gov = execute_query('''
+        SELECT "Governor ID" AS id, 
+               "Governor Name" AS name, 
+               "Power" AS power, 
+               "Total KP" AS kp, 
+               "Clickable" AS clickable 
+        FROM governors WHERE "Governor ID" = ?
+    ''', (gov_id,), fetchone=True)
+    
     if not gov:
         return jsonify({
             'status': 'error', 
@@ -97,11 +107,14 @@ def search_gov(gov_id):
 
     # 3. 查询名下绑定的农场
     farms = execute_query('''
-        SELECT g.id, g.name, g.power, g.kp 
+        SELECT g."Governor ID" AS id, 
+               g."Governor Name" AS name, 
+               g."Power" AS power, 
+               g."Total KP" AS kp 
         FROM bindings b 
-        JOIN governors g ON b.farm_id = g.id 
+        JOIN governors g ON b.farm_id = g."Governor ID" 
         WHERE b.main_id = ? 
-        ORDER BY g.power DESC
+        ORDER BY g."Power" DESC
     ''', (gov_id,), fetchall=True)
     
     farms_list = []
@@ -136,7 +149,7 @@ def bind_farm():
     if main_id == farm_id:
         return jsonify({'status': 'error', 'msg': 'Cannot bind yourself! / 不能绑定自己！'})
 
-    farm = execute_query('SELECT * FROM governors WHERE id = ?', (farm_id,), fetchone=True)
+    farm = execute_query('SELECT "Governor ID" AS id FROM governors WHERE "Governor ID" = ?', (farm_id,), fetchone=True)
     if not farm:
         return jsonify({'status': 'error', 'msg': 'Farm ID not found! / 未找到该农场 ID！'})
 
@@ -189,30 +202,43 @@ def admin():
 
 @app.route('/api/admin/data')
 def admin_data():
-    hidden = execute_query('SELECT id, name, power, kp FROM governors WHERE clickable = 0 ORDER BY power DESC', fetchall=True)
+    hidden = execute_query('''
+        SELECT "Governor ID" AS id, "Governor Name" AS name, "Power" AS power, "Total KP" AS kp 
+        FROM governors 
+        WHERE "Clickable" = 'FALSE' OR "Clickable" = '0' 
+        ORDER BY "Power" DESC
+    ''', fetchall=True)
     
     unbound_high = execute_query('''
-        SELECT id, name, power, kp FROM governors 
-        WHERE clickable = 1 AND power >= 30000000 
-        AND id NOT IN (SELECT main_id FROM bindings)
-        AND id NOT IN (SELECT farm_id FROM bindings)
-        ORDER BY power DESC
+        SELECT "Governor ID" AS id, "Governor Name" AS name, "Power" AS power, "Total KP" AS kp 
+        FROM governors 
+        WHERE ("Clickable" = 'TRUE' OR "Clickable" = '1' OR "Clickable" IS NULL) 
+        AND "Power" >= 30000000 
+        AND "Governor ID" NOT IN (SELECT main_id FROM bindings)
+        AND "Governor ID" NOT IN (SELECT farm_id FROM bindings)
+        ORDER BY "Power" DESC
     ''', fetchall=True)
     
     mains = execute_query('''
-        SELECT id, name, power, kp FROM governors 
-        WHERE clickable = 1 AND id NOT IN (SELECT farm_id FROM bindings)
-        ORDER BY power DESC
+        SELECT "Governor ID" AS id, "Governor Name" AS name, "Power" AS power, "Total KP" AS kp 
+        FROM governors 
+        WHERE ("Clickable" = 'TRUE' OR "Clickable" = '1' OR "Clickable" IS NULL) 
+        AND "Governor ID" NOT IN (SELECT farm_id FROM bindings)
+        ORDER BY "Power" DESC
     ''', fetchall=True)
     
     hierarchy = []
     for m in mains:
         farms = execute_query('''
-            SELECT g.id, g.name, g.power, g.kp 
+            SELECT g."Governor ID" AS id, 
+                   g."Governor Name" AS name, 
+                   g."Power" AS power, 
+                   g."Total KP" AS kp 
             FROM bindings b 
-            JOIN governors g ON b.farm_id = g.id 
-            WHERE b.main_id = ? AND g.clickable = 1
-            ORDER BY g.power DESC
+            JOIN governors g ON b.farm_id = g."Governor ID" 
+            WHERE b.main_id = ? 
+            AND (g."Clickable" = 'TRUE' OR g."Clickable" = '1' OR g."Clickable" IS NULL)
+            ORDER BY g."Power" DESC
         ''', (m['id'],), fetchall=True)
         
         farms_processed = []
