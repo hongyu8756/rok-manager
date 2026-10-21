@@ -151,7 +151,6 @@ Description : Bilingual frontend interface for player search, farm account
             font-weight: bold;
         }
 
-        /* 新增：暂存卡片与列表样式 */
         .preview-card {
             background: #e9ecef;
             border-left: 4px solid #007bff;
@@ -178,6 +177,15 @@ Description : Bilingual frontend interface for player search, farm account
             border-radius: 4px;
             margin-bottom: 6px;
         }
+
+        .ch-badge {
+            background: #17a2b8;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.85em;
+            font-weight: bold;
+        }
     </style>
 </head>
 
@@ -197,6 +205,7 @@ Description : Bilingual frontend interface for player search, farm account
 
         <h2 id="g-name" style="margin-top: 0; color: #333;"></h2>
         <p><strong>ID:</strong> <span id="g-id"></span></p>
+        <p><strong>市政厅等级 <span class="data-label">/ City Hall (CH):</span></strong> <span id="g-ch" class="ch-badge"></span></p>
         <p><strong>战力 <span class="data-label">/ Power:</span></strong> <span id="g-power"></span></p>
         <p><strong>击杀分 <span class="data-label">/ KP:</span></strong> <span id="g-kp"></span></p>
         <p><strong>绑定农场数 <span class="data-label">/ Farm Count:</span></strong> <span id="g-count"
@@ -209,7 +218,7 @@ Description : Bilingual frontend interface for player search, farm account
 
         <hr style="border: 0; border-top: 1px solid #eee; margin: 25px 0;">
 
-        <!-- 绑定新农场区域（优化版交互） -->
+        <!-- 绑定新农场区域 -->
         <h4 style="margin-top: 0;">➕ 绑定新农场 <span class="en-title" style="display:inline;">Bind New Farm</span></h4>
         
         <div style="display: flex; gap: 8px;">
@@ -221,7 +230,9 @@ Description : Bilingual frontend interface for player search, farm account
         <div id="farm-preview-card" class="preview-card" style="display:none;">
             <p style="margin:0 0 8px 0;">
                 <strong>确认账号：</strong><span id="pv-name" style="color:#007bff; font-weight:bold;"></span> 
-                | 战力: <span id="pv-power"></span> | KP: <span id="pv-kp"></span>
+                | CH: <span id="pv-ch" class="ch-badge"></span>
+                | 战力: <span id="pv-power"></span> 
+                | KP: <span id="pv-kp"></span>
             </p>
             <button onclick="confirmAddToStaging()" class="btn-success" style="padding: 6px 12px; font-size: 0.9em; margin:0;">
                 ＋ 确认无误，加入待绑定列表 / Add to List
@@ -269,6 +280,7 @@ Description : Bilingual frontend interface for player search, farm account
                         currentMainId = data.gov.id;
                         document.getElementById('g-name').innerText = data.gov.name;
                         document.getElementById('g-id').innerText = data.gov.id;
+                        document.getElementById('g-ch').innerText = 'CH ' + (data.gov.ch || 'N/A');
                         document.getElementById('g-power').innerText = data.gov.power.toLocaleString();
                         document.getElementById('g-kp').innerText = data.gov.kp.toLocaleString();
                         document.getElementById('g-count').innerText = data.farm_count;
@@ -290,14 +302,13 @@ Description : Bilingual frontend interface for player search, farm account
                                 farmsDiv.innerHTML += `
                                     <div class="farm-item">
                                         <button onclick="unbindFarm(${f.id})" class="btn-sm-danger">解绑 / Unbind</button>
-                                        <strong>${f.name}</strong> (ID: ${f.id})<br>
+                                        <strong>${f.name}</strong> <span class="ch-badge">CH ${f.ch || 'N/A'}</span> (ID: ${f.id})<br>
                                         <small>战力/Power: ${f.power.toLocaleString()} | KP: ${f.kp.toLocaleString()}${alertText}</small>
                                     </div>
                                 `;
                             });
                         }
 
-                        // 重置绑定区域状态
                         resetBindArea();
                         document.getElementById('gov-info').style.display = 'block';
                     }
@@ -340,9 +351,9 @@ Description : Bilingual frontend interface for player search, farm account
                         bindMsg.innerText = '警告：该账号已经被绑定为农场，无法重复绑定！';
                         document.getElementById('farm-preview-card').style.display = 'none';
                     } else {
-                        // 查到了信息，显示预览卡片
                         currentPreviewFarm = data.gov;
                         document.getElementById('pv-name').innerText = currentPreviewFarm.name;
+                        document.getElementById('pv-ch').innerText = 'CH ' + (currentPreviewFarm.ch || 'N/A');
                         document.getElementById('pv-power').innerText = Number(currentPreviewFarm.power).toLocaleString();
                         document.getElementById('pv-kp').innerText = Number(currentPreviewFarm.kp).toLocaleString();
                         document.getElementById('farm-preview-card').style.display = 'block';
@@ -379,13 +390,12 @@ Description : Bilingual frontend interface for player search, farm account
             
             listEl.innerHTML = stagingFarms.map((f, index) => `
                 <div class="staging-item">
-                    <span><strong>${f.name}</strong> (ID: ${f.id}) - 战力: ${Number(f.power).toLocaleString()}</span>
+                    <span><strong>${f.name}</strong> <span class="ch-badge">CH ${f.ch || 'N/A'}</span> (ID: ${f.id}) - 战力: ${Number(f.power).toLocaleString()}</span>
                     <button onclick="removeFromStaging(${index})" style="color:#dc3545; background:none; border:none; cursor:pointer; font-weight:bold;">❌ 移除</button>
                 </div>
             `).join('');
         }
 
-        // 移除单个暂存账号
         function removeFromStaging(index) {
             stagingFarms.splice(index, 1);
             renderStagingList();
@@ -411,7 +421,7 @@ Description : Bilingual frontend interface for player search, farm account
                 if (data.status === 'success' || data.status === 'warning') {
                     stagingFarms = [];
                     renderStagingList();
-                    searchGov(currentMainId); // 刷新最新名下农场列表
+                    searchGov(currentMainId);
                 }
             });
         }
