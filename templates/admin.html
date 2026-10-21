@@ -1,0 +1,267 @@
+<!--
+=============================================================================
+File Name   : admin.html
+Project     : Rise of Kingdoms (ROK) Kingdom Account Management System
+Author      : ROK Kingdom Management Team
+Created     : 2026-10-21
+Description : Administrative dashboard for hierarchy view with numbered 
+              rankings (#1, #2...), high-power unbound alerts, and management
+              unbind controls.
+=============================================================================
+-->
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Kingdom Admin Dashboard | 王国管理员后台</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f4f4f9;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+        }
+
+        .tab {
+            padding: 12px 20px;
+            background: #e0e0e0;
+            cursor: pointer;
+            border-radius: 5px 5px 0 0;
+            margin-right: 5px;
+            font-weight: bold;
+        }
+
+        .tab.active {
+            background: #007bff;
+            color: white;
+        }
+
+        .panel {
+            display: none;
+            background: white;
+            padding: 20px;
+            border-radius: 0 5px 5px 5px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .panel.active {
+            display: block;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        th,
+        td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+
+        .rank {
+            font-weight: bold;
+            color: #007bff;
+            width: 60px;
+        }
+
+        .farm-row {
+            background-color: #fafafa;
+            color: #555;
+            font-size: 0.9em;
+        }
+
+        .kp-warning {
+            color: #d9534f;
+            font-weight: bold;
+        }
+
+        .btn-unbind {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 3px 8px;
+            font-size: 0.8em;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+
+        .badge-main {
+            background: #28a745;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.8em;
+        }
+
+        .badge-farm {
+            background: #6c757d;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.8em;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <h2>👑 王国管理员后台 <span style="font-size: 0.6em; color: #666; font-weight: normal;">Kingdom Admin Dashboard</span>
+        </h2>
+
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab('hierarchy')">全员结构表 / Hierarchy</div>
+            <div class="tab" onclick="switchTab('unbound')">未绑定预警 (≥30M) / Unbound High Power</div>
+            <div class="tab" onclick="switchTab('hidden')">隐藏账号 / Hidden Accounts</div>
+        </div>
+
+        <div id="hierarchy" class="panel active">
+            <h3>全员结构表 (按主账号战力排序) / Hierarchy Structure</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>编号 / #</th>
+                        <th>类型 / Type</th>
+                        <th>ID</th>
+                        <th>名称 / Name</th>
+                        <th>战力 / Power</th>
+                        <th>击杀分 / KP</th>
+                        <th>操作 / Action</th>
+                    </tr>
+                </thead>
+                <tbody id="hierarchy-body">
+                    <tr>
+                        <td colspan="7">加载中... / Loading...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div id="unbound" class="panel">
+            <h3 style="color: #d9534f;">高战未绑定预警 (战力 ≥ 30M) / Unbound Players Warning</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>编号 / #</th>
+                        <th>ID</th>
+                        <th>名称 / Name</th>
+                        <th>战力 / Power</th>
+                        <th>击杀分 / KP</th>
+                    </tr>
+                </thead>
+                <tbody id="unbound-body"></tbody>
+            </table>
+        </div>
+
+        <div id="hidden" class="panel">
+            <h3>隐藏账号列表 (系统剔除) / Hidden Accounts</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>编号 / #</th>
+                        <th>ID</th>
+                        <th>名称 / Name</th>
+                        <th>战力 / Power</th>
+                        <th>击杀分 / KP</th>
+                    </tr>
+                </thead>
+                <tbody id="hidden-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById(tabId).classList.add('active');
+        }
+
+        function loadData() {
+            fetch('/api/admin/data')
+                .then(res => res.json())
+                .then(data => {
+                    let hiddenHtml = '';
+                    data.hidden.forEach((h, index) => {
+                        hiddenHtml += `<tr><td class="rank">#${index + 1}</td><td>${h.id}</td><td>${h.name}</td><td>${h.power.toLocaleString()}</td><td>${h.kp.toLocaleString()}</td></tr>`;
+                    });
+                    document.getElementById('hidden-body').innerHTML = hiddenHtml || '<tr><td colspan="5">无隐藏账号 / No hidden accounts</td></tr>';
+
+                    let unboundHtml = '';
+                    data.unbound_high.forEach((u, index) => {
+                        unboundHtml += `<tr><td class="rank">#${index + 1}</td><td>${u.id}</td><td>${u.name}</td><td>${u.power.toLocaleString()}</td><td>${u.kp.toLocaleString()}</td></tr>`;
+                    });
+                    document.getElementById('unbound-body').innerHTML = unboundHtml || '<tr><td colspan="5">所有高战均已绑定 / All high-power players bound</td></tr>';
+
+                    let hierarchyHtml = '';
+                    data.hierarchy.forEach((item, index) => {
+                        hierarchyHtml += `
+                        <tr>
+                            <td class="rank">#${index + 1}</td>
+                            <td><span class="badge-main">主号 Main</span></td>
+                            <td><strong>${item.main.id}</strong></td>
+                            <td><strong>${item.main.name}</strong></td>
+                            <td><strong>${item.main.power.toLocaleString()}</strong></td>
+                            <td><strong>${item.main.kp.toLocaleString()}</strong></td>
+                            <td>-</td>
+                        </tr>
+                    `;
+                        item.farms.forEach(f => {
+                            const warningStyle = f.kp_warning ? 'class="kp-warning"' : '';
+                            const warningTag = f.kp_warning ? ' ⚠️ (KP高于主号/High KP)' : '';
+                            hierarchyHtml += `
+                            <tr class="farm-row">
+                                <td></td>
+                                <td><span class="badge-farm">↳ 农场 Farm</span></td>
+                                <td>${f.id}</td>
+                                <td>${f.name}</td>
+                                <td>${f.power.toLocaleString()}</td>
+                                <td ${warningStyle}>${f.kp.toLocaleString()}${warningTag}</td>
+                                <td><button onclick="unbindFarm(${f.id})" class="btn-unbind">解绑 / Unbind</button></td>
+                            </tr>
+                        `;
+                        });
+                    });
+                    document.getElementById('hierarchy-body').innerHTML = hierarchyHtml;
+                });
+        }
+
+        function unbindFarm(farmId) {
+            if (!confirm('确定解绑该农场？ / Are you sure to unbind this farm?')) return;
+            fetch('/api/unbind', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ farm_id: farmId })
+            })
+                .then(res => res.json())
+                .then(data => {
+                    alert(data.msg);
+                    loadData();
+                });
+        }
+
+        loadData();
+    </script>
+
+</body>
+
+</html>
