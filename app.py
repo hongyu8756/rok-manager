@@ -2,7 +2,7 @@
 =============================================================================
 File Name   : app.py
 Project     : Rise of Kingdoms (ROK) Kingdom Account Management System
-Version     : 1.3 (Ultra-Fast Connection Pooling & Batch Binding)
+Version     : 1.4 (With CH Header Support & Batch Binding)
 Author      : ROK Kingdom Management Team
 Created     : 2026-10-21
 Description : Flask core server application providing REST APIs for player 
@@ -29,7 +29,6 @@ pg_pool = None
 if db_url:
     if db_url.startswith("postgres://"):
         db_url = db_url.replace("postgres://", "postgresql://", 1)
-    # 建立 1 到 10 个可复用的持久数据库连接
     pg_pool = SimpleConnectionPool(1, 10, db_url)
 
 def get_db():
@@ -74,9 +73,13 @@ def search_gov(gov_id):
                 'msg': 'Farm account detected, redirected to main. / 该账号为农场号，已自动跳转至主账号。'
             })
 
-        # 2. 极速合并查询：同时查出主账号信息及其所有绑定的农场
+        # 2. 包含 "CH" 字段的主账号查询
         query_main = f'''
-            SELECT "Governor ID" AS id, "Governor Name" AS name, "Power" AS power, "Total KP" AS kp 
+            SELECT "Governor ID" AS id, 
+                   "Governor Name" AS name, 
+                   "Power" AS power, 
+                   "Total KP" AS kp,
+                   "CH" AS ch
             FROM governors WHERE "Governor ID" = {placeholder}
         '''
         cursor.execute(query_main, (gov_id,))
@@ -87,8 +90,13 @@ def search_gov(gov_id):
 
         gov = dict(gov_row)
 
+        # 包含 "CH" 字段的农场号查询
         query_farms = f'''
-            SELECT g."Governor ID" AS id, g."Governor Name" AS name, g."Power" AS power, g."Total KP" AS kp 
+            SELECT g."Governor ID" AS id, 
+                   g."Governor Name" AS name, 
+                   g."Power" AS power, 
+                   g."Total KP" AS kp,
+                   g."CH" AS ch
             FROM bindings b 
             JOIN governors g ON b.farm_id = g."Governor ID" 
             WHERE b.main_id = {placeholder} 
@@ -125,7 +133,6 @@ def bind_farm():
     main_id = data.get('main_id')
     farm_ids = data.get('farm_ids', [])
     
-    # 兼容单个绑定传入 farm_id
     if not farm_ids and data.get('farm_id'):
         farm_ids = [data.get('farm_id')]
 
@@ -167,7 +174,6 @@ def bind_farm():
                 errors.append(f'ID {farm_id}: Already a Main Account! / 该账号已是主账号且绑定了农场！')
                 continue
 
-            # 执行绑定
             cursor.execute(
                 f'INSERT INTO bindings (main_id, farm_id, bind_date) VALUES ({p}, {p}, CURRENT_TIMESTAMP)', 
                 (main_id, farm_id)
@@ -217,7 +223,7 @@ def admin_data():
         cursor = conn.cursor(cursor_factory=RealDictCursor) if is_pg else conn.cursor()
 
         cursor.execute('''
-            SELECT "Governor ID" AS id, "Governor Name" AS name, "Power" AS power, "Total KP" AS kp 
+            SELECT "Governor ID" AS id, "Governor Name" AS name, "Power" AS power, "Total KP" AS kp, "CH" AS ch 
             FROM governors 
             WHERE "Clickable" = 'FALSE' OR "Clickable" = '0' 
             ORDER BY "Power" DESC
@@ -225,7 +231,7 @@ def admin_data():
         hidden = [dict(r) for r in cursor.fetchall() or []]
 
         cursor.execute('''
-            SELECT "Governor ID" AS id, "Governor Name" AS name, "Power" AS power, "Total KP" AS kp 
+            SELECT "Governor ID" AS id, "Governor Name" AS name, "Power" AS power, "Total KP" AS kp, "CH" AS ch 
             FROM governors 
             WHERE ("Clickable" = 'TRUE' OR "Clickable" = '1' OR "Clickable" IS NULL) 
             AND "Power" >= 30000000 
@@ -236,7 +242,7 @@ def admin_data():
         unbound_high = [dict(r) for r in cursor.fetchall() or []]
 
         cursor.execute('''
-            SELECT "Governor ID" AS id, "Governor Name" AS name, "Power" AS power, "Total KP" AS kp 
+            SELECT "Governor ID" AS id, "Governor Name" AS name, "Power" AS power, "Total KP" AS kp, "CH" AS ch 
             FROM governors 
             WHERE ("Clickable" = 'TRUE' OR "Clickable" = '1' OR "Clickable" IS NULL) 
             AND "Governor ID" NOT IN (SELECT farm_id FROM bindings)
@@ -245,7 +251,7 @@ def admin_data():
         mains = [dict(r) for r in cursor.fetchall() or []]
 
         cursor.execute('''
-            SELECT b.main_id, g."Governor ID" AS id, g."Governor Name" AS name, g."Power" AS power, g."Total KP" AS kp 
+            SELECT b.main_id, g."Governor ID" AS id, g."Governor Name" AS name, g."Power" AS power, g."Total KP" AS kp, g."CH" AS ch 
             FROM bindings b 
             JOIN governors g ON b.farm_id = g."Governor ID" 
             WHERE (g."Clickable" = 'TRUE' OR g."Clickable" = '1' OR g."Clickable" IS NULL)
