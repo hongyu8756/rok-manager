@@ -4,8 +4,8 @@ File Name   : index.html
 Project     : Rise of Kingdoms (ROK) Kingdom Account Management System
 Author      : ROK Kingdom Management Team
 Created     : 2026-10-21
-Description : Bilingual frontend interface for player search, farm account
-              binding/unbinding, and high-KP warning display.
+Description : Bilingual frontend interface for player search, farm account 
+              batch binding/unbinding, and high-KP warning display.
 =============================================================================
 -->
 <!DOCTYPE html>
@@ -65,6 +65,14 @@ Description : Bilingual frontend interface for player search, farm account
 
         button:hover {
             background: #0056b3;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
         }
 
         .btn-success {
@@ -142,6 +150,34 @@ Description : Bilingual frontend interface for player search, farm account
             color: #d9534f;
             font-weight: bold;
         }
+
+        /* 新增：暂存卡片与列表样式 */
+        .preview-card {
+            background: #e9ecef;
+            border-left: 4px solid #007bff;
+            padding: 12px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+
+        .staging-box {
+            background: #f8f9fa;
+            border: 1px dashed #007bff;
+            padding: 12px;
+            border-radius: 6px;
+            margin-top: 15px;
+        }
+
+        .staging-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: white;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 6px;
+        }
     </style>
 </head>
 
@@ -173,15 +209,44 @@ Description : Bilingual frontend interface for player search, farm account
 
         <hr style="border: 0; border-top: 1px solid #eee; margin: 25px 0;">
 
+        <!-- 绑定新农场区域（优化版交互） -->
         <h4 style="margin-top: 0;">➕ 绑定新农场 <span class="en-title" style="display:inline;">Bind New Farm</span></h4>
-        <input type="number" id="farm-id-input" placeholder="请输入农场 ID / Enter Farm ID">
-        <button onclick="bindFarm()" class="btn-success">确认绑定 / Confirm Binding</button>
-        <button onclick="closeInfo()" class="btn-danger">退出 / Exit</button>
+        
+        <div style="display: flex; gap: 8px;">
+            <input type="number" id="farm-id-input" placeholder="请输入农场 ID / Enter Farm ID" style="margin:0;">
+            <button onclick="verifyFarm()" class="btn-secondary" style="width: auto; white-space: nowrap; margin:0;">验证账号 / Verify</button>
+        </div>
+
+        <!-- 预览确认卡片 -->
+        <div id="farm-preview-card" class="preview-card" style="display:none;">
+            <p style="margin:0 0 8px 0;">
+                <strong>确认账号：</strong><span id="pv-name" style="color:#007bff; font-weight:bold;"></span> 
+                | 战力: <span id="pv-power"></span> | KP: <span id="pv-kp"></span>
+            </p>
+            <button onclick="confirmAddToStaging()" class="btn-success" style="padding: 6px 12px; font-size: 0.9em; margin:0;">
+                ＋ 确认无误，加入待绑定列表 / Add to List
+            </button>
+        </div>
+
+        <!-- 待绑定暂存列表 -->
+        <div id="staging-area" class="staging-box" style="display:none;">
+            <h4 style="margin-top: 0; margin-bottom: 10px;">📋 待绑定列表 / Pending List (<span id="staging-count">0</span>)</h4>
+            <div id="staging-list"></div>
+            
+            <button onclick="submitBatchBind()" class="btn-primary" style="margin-top: 10px; margin-bottom:0;">
+                🚀 一键确认绑定以上所有小号 / Confirm All Bindings
+            </button>
+        </div>
+
         <p id="bind-msg"></p>
+
+        <button onclick="closeInfo()" class="btn-danger" style="margin-top: 15px;">退出 / Exit</button>
     </div>
 
     <script>
         let currentMainId = null;
+        let currentPreviewFarm = null;
+        let stagingFarms = [];
 
         function searchGov(forceId = null) {
             const govId = forceId || document.getElementById('search-id').value;
@@ -232,30 +297,123 @@ Description : Bilingual frontend interface for player search, farm account
                             });
                         }
 
+                        // 重置绑定区域状态
+                        resetBindArea();
                         document.getElementById('gov-info').style.display = 'block';
                     }
                 });
         }
 
-        function bindFarm() {
-            const farmId = document.getElementById('farm-id-input').value;
-            if (!farmId || !currentMainId) return;
+        // 1. 输入 ID 验证查询小号信息
+        function verifyFarm() {
+            const farmId = document.getElementById('farm-id-input').value.trim();
+            const bindMsg = document.getElementById('bind-msg');
+            bindMsg.innerText = '';
+
+            if (!farmId) {
+                bindMsg.className = 'error';
+                bindMsg.innerText = '请先输入农场 ID！ / Please enter Farm ID!';
+                return;
+            }
+
+            if (farmId == currentMainId) {
+                bindMsg.className = 'error';
+                bindMsg.innerText = '不能绑定自己！ / Cannot bind yourself!';
+                return;
+            }
+
+            if (stagingFarms.some(f => f.id == farmId)) {
+                bindMsg.className = 'error';
+                bindMsg.innerText = '该农场已经在待绑定列表里了！ / Already in staging list!';
+                return;
+            }
+
+            fetch(`/api/search/${farmId}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.status === 'error') {
+                        bindMsg.className = 'error';
+                        bindMsg.innerText = data.msg;
+                        document.getElementById('farm-preview-card').style.display = 'none';
+                    } else if (data.status === 'redirect') {
+                        bindMsg.className = 'error';
+                        bindMsg.innerText = '警告：该账号已经被绑定为农场，无法重复绑定！';
+                        document.getElementById('farm-preview-card').style.display = 'none';
+                    } else {
+                        // 查到了信息，显示预览卡片
+                        currentPreviewFarm = data.gov;
+                        document.getElementById('pv-name').innerText = currentPreviewFarm.name;
+                        document.getElementById('pv-power').innerText = Number(currentPreviewFarm.power).toLocaleString();
+                        document.getElementById('pv-kp').innerText = Number(currentPreviewFarm.kp).toLocaleString();
+                        document.getElementById('farm-preview-card').style.display = 'block';
+                    }
+                });
+        }
+
+        // 2. 确认加入暂存列表
+        function confirmAddToStaging() {
+            if (!currentPreviewFarm) return;
+            
+            stagingFarms.push(currentPreviewFarm);
+            currentPreviewFarm = null;
+            
+            document.getElementById('farm-preview-card').style.display = 'none';
+            document.getElementById('farm-id-input').value = '';
+            document.getElementById('bind-msg').innerText = '';
+
+            renderStagingList();
+        }
+
+        // 3. 渲染暂存列表
+        function renderStagingList() {
+            const listEl = document.getElementById('staging-list');
+            const stagingArea = document.getElementById('staging-area');
+            
+            if (stagingFarms.length === 0) {
+                stagingArea.style.display = 'none';
+                return;
+            }
+
+            stagingArea.style.display = 'block';
+            document.getElementById('staging-count').innerText = stagingFarms.length;
+            
+            listEl.innerHTML = stagingFarms.map((f, index) => `
+                <div class="staging-item">
+                    <span><strong>${f.name}</strong> (ID: ${f.id}) - 战力: ${Number(f.power).toLocaleString()}</span>
+                    <button onclick="removeFromStaging(${index})" style="color:#dc3545; background:none; border:none; cursor:pointer; font-weight:bold;">❌ 移除</button>
+                </div>
+            `).join('');
+        }
+
+        // 移除单个暂存账号
+        function removeFromStaging(index) {
+            stagingFarms.splice(index, 1);
+            renderStagingList();
+        }
+
+        // 4. 一键提交批量绑定
+        function submitBatchBind() {
+            if (stagingFarms.length === 0) return;
+            
+            const farmIds = stagingFarms.map(f => f.id);
 
             fetch('/api/bind', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ main_id: currentMainId, farm_id: farmId })
+                body: JSON.stringify({ main_id: currentMainId, farm_ids: farmIds })
             })
-                .then(res => res.json())
-                .then(data => {
-                    const msgEl = document.getElementById('bind-msg');
-                    msgEl.innerText = data.msg;
-                    msgEl.className = data.status;
-                    if (data.status === 'success') {
-                        document.getElementById('farm-id-input').value = '';
-                        searchGov(currentMainId);
-                    }
-                });
+            .then(res => res.json())
+            .then(data => {
+                const bindMsg = document.getElementById('bind-msg');
+                bindMsg.innerHTML = data.msg;
+                bindMsg.className = data.status === 'error' ? 'error' : 'success';
+
+                if (data.status === 'success' || data.status === 'warning') {
+                    stagingFarms = [];
+                    renderStagingList();
+                    searchGov(currentMainId); // 刷新最新名下农场列表
+                }
+            });
         }
 
         function unbindFarm(farmId) {
@@ -275,11 +433,20 @@ Description : Bilingual frontend interface for player search, farm account
                 });
         }
 
+        function resetBindArea() {
+            stagingFarms = [];
+            currentPreviewFarm = null;
+            document.getElementById('farm-id-input').value = '';
+            document.getElementById('farm-preview-card').style.display = 'none';
+            document.getElementById('bind-msg').innerText = '';
+            renderStagingList();
+        }
+
         function closeInfo() {
             document.getElementById('gov-info').style.display = 'none';
             document.getElementById('search-id').value = '';
             document.getElementById('search-msg').innerText = '';
-            document.getElementById('bind-msg').innerText = '';
+            resetBindArea();
             currentMainId = null;
         }
     </script>
