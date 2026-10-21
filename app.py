@@ -2,13 +2,12 @@
 =============================================================================
 File Name   : app.py
 Project     : Rise of Kingdoms (ROK) Kingdom Account Management System
-Version     : 1.1
+Version     : 1.1 (Performance Optimized)
 Author      : ROK Kingdom Management Team
 Created     : 2026-10-21
 Description : Flask core server application providing REST APIs for player 
               searches, farm bindings/unbindings, and administrative 
-              hierarchy dashboards. Updated v1.1 to support native CSV column 
-              headers directly imported into Supabase.
+              hierarchy dashboards.
 =============================================================================
 """
 
@@ -21,11 +20,6 @@ from flask import Flask, render_template, request, jsonify
 app = Flask(__name__)
 
 def get_db_connection():
-    """
-    自动判断数据库连接：
-    1. 如果设置了 DATABASE_URL（Render 云端），连接 Supabase PostgreSQL 数据库。
-    2. 如果没有设置环境变量（本地运行），使用本地的 SQLite 数据库。
-    """
     db_url = os.environ.get('DATABASE_URL')
     if db_url:
         if db_url.startswith("postgres://"):
@@ -38,10 +32,6 @@ def get_db_connection():
         return conn
 
 def execute_query(query, params=(), fetchone=False, fetchall=False, commit=False):
-    """
-    统一的数据库查询与写入辅助函数，自动兼容 SQLite (?) 与 PostgreSQL (%s) 占位符。
-    同时统一返回字典 (Dict) 格式，保证字典取值如 row['kp'] 不出错。
-    """
     db_url = os.environ.get('DATABASE_URL')
     conn = get_db_connection()
     
@@ -68,19 +58,12 @@ def execute_query(query, params=(), fetchone=False, fetchall=False, commit=False
     conn.close()
     return result
 
-# ---------------------------------------------------------------------------
-# 玩家前端页面路由 (Player Frontend Route)
-# ---------------------------------------------------------------------------
 @app.route('/')
 def index():
     return render_template('index.html')
 
-# ---------------------------------------------------------------------------
-# API: 玩家搜索接口 (Search Governor API)
-# ---------------------------------------------------------------------------
 @app.route('/api/search/<int:gov_id>')
 def search_gov(gov_id):
-    # 1. 若为农场号，自动跳转至主账号
     farm_check = execute_query('SELECT main_id FROM bindings WHERE farm_id = ?', (gov_id,), fetchone=True)
     if farm_check:
         return jsonify({
@@ -89,7 +72,6 @@ def search_gov(gov_id):
             'msg': 'Farm account detected, redirected to main. / 该账号为农场号，已自动跳转至主账号。'
         })
 
-    # 2. 查询主账号信息（兼容 Supabase 包含空格/大写的 CSV 字段名）
     gov = execute_query('''
         SELECT "Governor ID" AS id, 
                "Governor Name" AS name, 
@@ -105,7 +87,6 @@ def search_gov(gov_id):
             'msg': 'ID not found in database. / 未查找到该账号 ID，请检查。'
         })
 
-    # 3. 查询名下绑定的农场
     farms = execute_query('''
         SELECT g."Governor ID" AS id, 
                g."Governor Name" AS name, 
@@ -137,9 +118,6 @@ def search_gov(gov_id):
         'kp_warnings': kp_warnings
     })
 
-# ---------------------------------------------------------------------------
-# API: 绑定农场接口 (Bind Farm API)
-# ---------------------------------------------------------------------------
 @app.route('/api/bind', methods=['POST'])
 def bind_farm():
     data = request.json or {}
@@ -175,9 +153,6 @@ def bind_farm():
         
     return jsonify({'status': status, 'msg': msg})
 
-# ---------------------------------------------------------------------------
-# API: 解绑接口 (Unbind Farm API)
-# ---------------------------------------------------------------------------
 @app.route('/api/unbind', methods=['POST'])
 def unbind_farm():
     data = request.json or {}
@@ -193,9 +168,6 @@ def unbind_farm():
         
     return jsonify({'status': status, 'msg': msg})
 
-# ---------------------------------------------------------------------------
-# 管理员页面与数据 API (Admin Routes)
-# ---------------------------------------------------------------------------
 @app.route('/admin')
 def admin():
     return render_template('admin.html')
@@ -227,28 +199,42 @@ def admin_data():
         ORDER BY "Power" DESC
     ''', fetchall=True)
     
+    # 极速批量查询：用 1 次查询查出所有绑定农场，替代循环单条查询
+    all_farms = execute_query('''
+        SELECT b.main_id, 
+               g."Governor ID" AS id, 
+               g."Governor Name" AS name, 
+               g."Power" AS power, 
+               g."Total KP" AS kp 
+        FROM bindings b 
+        JOIN governors g ON b.farm_id = g."Governor ID" 
+        WHERE (g."Clickable" = 'TRUE' OR g."Clickable" = '1' OR g."Clickable" IS NULL)
+        ORDER BY g."Power" DESC
+    ''', fetchall=True)
+    
+    farms_by_main = {}
+    for f in all_farms:
+        f_dict = dict(f)
+        m_id = f_dict['main_id']
+        if m_id not in farms_by_main:
+            farms_by_main[m_id] = []
+        farms_by_main[m_id].append(f_dict)
+
     hierarchy = []
     for m in mains:
-        farms = execute_query('''
-            SELECT g."Governor ID" AS id, 
-                   g."Governor Name" AS name, 
-                   g."Power" AS power, 
-                   g."Total KP" AS kp 
-            FROM bindings b 
-            JOIN governors g ON b.farm_id = g."Governor ID" 
-            WHERE b.main_id = ? 
-            AND (g."Clickable" = 'TRUE' OR g."Clickable" = '1' OR g."Clickable" IS NULL)
-            ORDER BY g."Power" DESC
-        ''', (m['id'],), fetchall=True)
+        m_dict = dict(m)
+        m_id = m_dict['id']
+        m_kp = m_dict['kp']
         
+        farms = farms_by_main.get(m_id, [])
         farms_processed = []
         for f in farms:
-            f_dict = dict(f)
-            f_dict['kp_warning'] = f_dict['kp'] > m['kp']
-            farms_processed.append(f_dict)
+            f_copy = dict(f)
+            f_copy['kp_warning'] = f_copy['kp'] > m_kp
+            farms_processed.append(f_copy)
 
         hierarchy.append({
-            'main': dict(m),
+            'main': m_dict,
             'farms': farms_processed
         })
         
