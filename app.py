@@ -2,9 +2,12 @@
 =============================================================================
 File Name   : app.py
 Project     : Rise of Kingdoms (ROK) Kingdom Account Management System
-Version     : 1.2 (Ultra-Fast Connection Pooling & Query Merging)
+Version     : 1.3 (Ultra-Fast Connection Pooling & Batch Binding)
 Author      : ROK Kingdom Management Team
 Created     : 2026-10-21
+Description : Flask core server application providing REST APIs for player 
+              searches, farm batch bindings/unbindings, and administrative 
+              hierarchy dashboards.
 =============================================================================
 """
 
@@ -120,32 +123,67 @@ def search_gov(gov_id):
 def bind_farm():
     data = request.json or {}
     main_id = data.get('main_id')
-    farm_id = data.get('farm_id')
+    farm_ids = data.get('farm_ids', [])
     
-    if main_id == farm_id:
-        return jsonify({'status': 'error', 'msg': 'Cannot bind yourself! / 不能绑定自己！'})
+    # 兼容单个绑定传入 farm_id
+    if not farm_ids and data.get('farm_id'):
+        farm_ids = [data.get('farm_id')]
+
+    if not farm_ids:
+        return jsonify({'status': 'error', 'msg': 'No farm IDs provided! / 未提供任何待绑定的小号 ID！'})
 
     conn, is_pg = get_db()
     try:
         cursor = conn.cursor(cursor_factory=RealDictCursor) if is_pg else conn.cursor()
         p = '%s' if is_pg else '?'
 
-        cursor.execute(f'SELECT "Governor ID" FROM governors WHERE "Governor ID" = {p}', (farm_id,))
-        if not cursor.fetchone():
-            return jsonify({'status': 'error', 'msg': 'Farm ID not found! / 未找到该农场 ID！'})
+        bound_success = []
+        errors = []
 
-        cursor.execute(f'SELECT 1 FROM bindings WHERE farm_id = {p}', (farm_id,))
-        if cursor.fetchone():
-            return jsonify({'status': 'error', 'msg': 'This farm is already bound to another main! / 该农场已被其他账号绑定！'})
+        for farm_id in farm_ids:
+            try:
+                farm_id = int(farm_id)
+            except ValueError:
+                errors.append(f'ID {farm_id}: Invalid ID format! / ID 格式不正确！')
+                continue
 
-        cursor.execute(f'SELECT 1 FROM bindings WHERE main_id = {p}', (farm_id,))
-        if cursor.fetchone():
-            return jsonify({'status': 'error', 'msg': 'This ID is already a Main Account with farms bound to it! / 该账号已是主账号且绑定了农场！'})
+            if int(main_id) == farm_id:
+                errors.append(f'ID {farm_id}: Cannot bind yourself! / 不能绑定自己！')
+                continue
 
-        cursor.execute(f'INSERT INTO bindings (main_id, farm_id, bind_date) VALUES ({p}, {p}, CURRENT_TIMESTAMP)', (main_id, farm_id))
+            cursor.execute(f'SELECT "Governor Name" FROM governors WHERE "Governor ID" = {p}', (farm_id,))
+            farm_info = cursor.fetchone()
+            if not farm_info:
+                errors.append(f'ID {farm_id}: ID not found! / 账号不存在！')
+                continue
+
+            cursor.execute(f'SELECT 1 FROM bindings WHERE farm_id = {p}', (farm_id,))
+            if cursor.fetchone():
+                errors.append(f'ID {farm_id}: Already bound to another main! / 已被其他账号绑定！')
+                continue
+
+            cursor.execute(f'SELECT 1 FROM bindings WHERE main_id = {p}', (farm_id,))
+            if cursor.fetchone():
+                errors.append(f'ID {farm_id}: Already a Main Account! / 该账号已是主账号且绑定了农场！')
+                continue
+
+            # 执行绑定
+            cursor.execute(
+                f'INSERT INTO bindings (main_id, farm_id, bind_date) VALUES ({p}, {p}, CURRENT_TIMESTAMP)', 
+                (main_id, farm_id)
+            )
+            bound_success.append(farm_id)
+
         conn.commit()
         cursor.close()
-        return jsonify({'status': 'success', 'msg': 'Binding successful! / 绑定成功！'})
+
+        if errors and not bound_success:
+            return jsonify({'status': 'error', 'msg': '<br>'.join(errors)})
+        elif errors and bound_success:
+            return jsonify({'status': 'warning', 'msg': f'部分绑定成功！<br>失败原因：<br>' + '<br>'.join(errors)})
+        
+        return jsonify({'status': 'success', 'msg': f'成功绑定 {len(bound_success)} 个农场账号！ / Successfully bound!'})
+
     except Exception as e:
         return jsonify({'status': 'error', 'msg': 'Failed / 绑定失败：' + str(e)})
     finally:
