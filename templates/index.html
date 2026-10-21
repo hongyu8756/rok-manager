@@ -1,0 +1,288 @@
+<!--
+=============================================================================
+File Name   : index.html
+Project     : Rise of Kingdoms (ROK) Kingdom Account Management System
+Author      : ROK Kingdom Management Team
+Created     : 2026-10-21
+Description : Bilingual frontend interface for player search, farm account
+              binding/unbinding, and high-KP warning display.
+=============================================================================
+-->
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Account Management | 账号管理系统</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 650px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f4f4f9;
+        }
+
+        .card {
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+
+        .en-title {
+            font-size: 0.8em;
+            color: #666;
+            font-weight: normal;
+            display: block;
+            margin-top: 5px;
+        }
+
+        input {
+            padding: 12px;
+            margin: 8px 0;
+            width: 100%;
+            box-sizing: border-box;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        button {
+            padding: 12px;
+            margin: 8px 0;
+            width: 100%;
+            box-sizing: border-box;
+            font-size: 16px;
+            font-weight: bold;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+
+        .btn-success {
+            background: #28a745;
+        }
+
+        .btn-success:hover {
+            background: #218838;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+        }
+
+        .btn-sm-danger {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            font-size: 0.8em;
+            border-radius: 3px;
+            cursor: pointer;
+            float: right;
+        }
+
+        .error {
+            color: #dc3545;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        .success {
+            color: #28a745;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        .warning-box {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            font-size: 0.9em;
+        }
+
+        #gov-info {
+            display: none;
+        }
+
+        .farm-list {
+            margin-top: 20px;
+            border-top: 1px solid #eee;
+            padding-top: 15px;
+        }
+
+        .farm-item {
+            margin-bottom: 10px;
+            padding: 8px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+
+        .data-label {
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .kp-alert {
+            color: #d9534f;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="card">
+        <h2 style="margin-top: 0;">🔍 搜索账号 <span class="en-title">Search Player Account</span></h2>
+        <input type="number" id="search-id" placeholder="请输入玩家 ID / Enter Player ID">
+        <button onclick="searchGov()">搜 索 / Search</button>
+        <p id="search-msg"></p>
+    </div>
+
+    <div class="card" id="gov-info">
+        <div id="kp-warning-banner" class="warning-box" style="display:none;">
+            ⚠️ <strong>警告 / Warning:</strong> 检测到绑定农场的 KP 高于主账号！/ Detected farm KP higher than main account!
+        </div>
+
+        <h2 id="g-name" style="margin-top: 0; color: #333;"></h2>
+        <p><strong>ID:</strong> <span id="g-id"></span></p>
+        <p><strong>战力 <span class="data-label">/ Power:</span></strong> <span id="g-power"></span></p>
+        <p><strong>击杀分 <span class="data-label">/ KP:</span></strong> <span id="g-kp"></span></p>
+        <p><strong>绑定农场数 <span class="data-label">/ Farm Count:</span></strong> <span id="g-count"
+                style="color: #007bff; font-weight: bold;"></span></p>
+
+        <div class="farm-list" id="farm-list">
+            <h4 style="margin-top: 0;">名下农场 <span class="data-label">/ Bound Farms:</span></h4>
+            <div id="farms"></div>
+        </div>
+
+        <hr style="border: 0; border-top: 1px solid #eee; margin: 25px 0;">
+
+        <h4 style="margin-top: 0;">➕ 绑定新农场 <span class="en-title" style="display:inline;">Bind New Farm</span></h4>
+        <input type="number" id="farm-id-input" placeholder="请输入农场 ID / Enter Farm ID">
+        <button onclick="bindFarm()" class="btn-success">确认绑定 / Confirm Binding</button>
+        <button onclick="closeInfo()" class="btn-danger">退出 / Exit</button>
+        <p id="bind-msg"></p>
+    </div>
+
+    <script>
+        let currentMainId = null;
+
+        function searchGov(forceId = null) {
+            const govId = forceId || document.getElementById('search-id').value;
+            if (!govId) return;
+
+            fetch(`/api/search/${govId}`)
+                .then(response => response.json())
+                .then(data => {
+                    const msgEl = document.getElementById('search-msg');
+                    if (data.status === 'error') {
+                        msgEl.className = 'error';
+                        msgEl.innerText = data.msg;
+                        document.getElementById('gov-info').style.display = 'none';
+                    } else if (data.status === 'redirect') {
+                        msgEl.className = 'error';
+                        msgEl.innerText = data.msg;
+                        searchGov(data.main_id);
+                    } else {
+                        msgEl.innerText = '';
+                        currentMainId = data.gov.id;
+                        document.getElementById('g-name').innerText = data.gov.name;
+                        document.getElementById('g-id').innerText = data.gov.id;
+                        document.getElementById('g-power').innerText = data.gov.power.toLocaleString();
+                        document.getElementById('g-kp').innerText = data.gov.kp.toLocaleString();
+                        document.getElementById('g-count').innerText = data.farm_count;
+
+                        const warningBanner = document.getElementById('kp-warning-banner');
+                        if (data.kp_warnings && data.kp_warnings.length > 0) {
+                            warningBanner.style.display = 'block';
+                        } else {
+                            warningBanner.style.display = 'none';
+                        }
+
+                        const farmsDiv = document.getElementById('farms');
+                        farmsDiv.innerHTML = '';
+                        if (data.farm_count === 0) {
+                            farmsDiv.innerHTML = '<p style="color:#888;">暂无绑定农场 / No farms bound yet</p>';
+                        } else {
+                            data.farms.forEach(f => {
+                                const alertText = f.kp_warning ? `<span class="kp-alert"> (⚠️ 农场KP高 / High KP: ${f.kp.toLocaleString()})</span>` : '';
+                                farmsDiv.innerHTML += `
+                                    <div class="farm-item">
+                                        <button onclick="unbindFarm(${f.id})" class="btn-sm-danger">解绑 / Unbind</button>
+                                        <strong>${f.name}</strong> (ID: ${f.id})<br>
+                                        <small>战力/Power: ${f.power.toLocaleString()} | KP: ${f.kp.toLocaleString()}${alertText}</small>
+                                    </div>
+                                `;
+                            });
+                        }
+
+                        document.getElementById('gov-info').style.display = 'block';
+                    }
+                });
+        }
+
+        function bindFarm() {
+            const farmId = document.getElementById('farm-id-input').value;
+            if (!farmId || !currentMainId) return;
+
+            fetch('/api/bind', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ main_id: currentMainId, farm_id: farmId })
+            })
+                .then(res => res.json())
+                .then(data => {
+                    const msgEl = document.getElementById('bind-msg');
+                    msgEl.innerText = data.msg;
+                    msgEl.className = data.status;
+                    if (data.status === 'success') {
+                        document.getElementById('farm-id-input').value = '';
+                        searchGov(currentMainId);
+                    }
+                });
+        }
+
+        function unbindFarm(farmId) {
+            if (!confirm('确定要解绑该农场吗？ / Are you sure you want to unbind this farm?')) return;
+
+            fetch('/api/unbind', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ farm_id: farmId })
+            })
+                .then(res => res.json())
+                .then(data => {
+                    alert(data.msg);
+                    if (data.status === 'success') {
+                        searchGov(currentMainId);
+                    }
+                });
+        }
+
+        function closeInfo() {
+            document.getElementById('gov-info').style.display = 'none';
+            document.getElementById('search-id').value = '';
+            document.getElementById('search-msg').innerText = '';
+            document.getElementById('bind-msg').innerText = '';
+            currentMainId = null;
+        }
+    </script>
+</body>
+
+</html>
