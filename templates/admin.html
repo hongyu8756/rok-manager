@@ -4,9 +4,8 @@ File Name   : admin.html
 Project     : Rise of Kingdoms (ROK) Kingdom Account Management System
 Author      : ROK Kingdom Management Team
 Created     : 2026-10-21
-Description : Administrative dashboard for hierarchy view with numbered 
-              rankings (#1, #2...), high-power unbound alerts, and management
-              unbind controls.
+Description : Administrative dashboard interface for hierarchy view, unbound 
+              high-power alerts, hidden accounts, and unbind controls.
 =============================================================================
 -->
 <!DOCTYPE html>
@@ -28,35 +27,39 @@ Description : Administrative dashboard for hierarchy view with numbered
             margin: 0 auto;
         }
 
-        .tabs {
+        .header {
             display: flex;
+            justify-content: space-between;
+            align-items: center;
             margin-bottom: 20px;
         }
 
-        .tab {
-            padding: 12px 20px;
-            background: #e0e0e0;
-            cursor: pointer;
-            border-radius: 5px 5px 0 0;
-            margin-right: 5px;
-            font-weight: bold;
+        .nav-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
         }
 
-        .tab.active {
+        .tab-btn {
+            padding: 10px 20px;
+            background: #e9ecef;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 15px;
+        }
+
+        .tab-btn.active {
             background: #007bff;
             color: white;
         }
 
-        .panel {
-            display: none;
+        .card {
             background: white;
             padding: 20px;
-            border-radius: 0 5px 5px 5px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        .panel.active {
-            display: block;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
         }
 
         table {
@@ -65,58 +68,65 @@ Description : Administrative dashboard for hierarchy view with numbered
             margin-top: 10px;
         }
 
-        th,
-        td {
-            border: 1px solid #ddd;
-            padding: 10px;
+        th, td {
+            padding: 10px 12px;
             text-align: left;
+            border-bottom: 1px solid #ddd;
         }
 
         th {
-            background-color: #f2f2f2;
+            background: #f8f9fa;
+            color: #333;
         }
 
-        .rank {
+        .main-row {
+            background: #f1f3f5;
             font-weight: bold;
-            color: #007bff;
-            width: 60px;
         }
 
         .farm-row {
-            background-color: #fafafa;
-            color: #555;
-            font-size: 0.9em;
+            background: #ffffff;
         }
 
-        .kp-warning {
-            color: #d9534f;
+        .farm-indent {
+            padding-left: 30px !important;
+            color: #555;
+        }
+
+        .ch-badge {
+            background: #17a2b8;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.85em;
             font-weight: bold;
         }
 
-        .btn-unbind {
+        .kp-alert {
+            color: #dc3545;
+            font-weight: bold;
+        }
+
+        .btn-sm-danger {
             background: #dc3545;
             color: white;
             border: none;
-            padding: 3px 8px;
+            padding: 4px 8px;
             font-size: 0.8em;
             border-radius: 3px;
             cursor: pointer;
         }
 
-        .badge-main {
-            background: #28a745;
-            color: white;
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-size: 0.8em;
+        .btn-sm-danger:hover {
+            background: #c82333;
         }
 
-        .badge-farm {
-            background: #6c757d;
-            color: white;
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-size: 0.8em;
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
         }
     </style>
 </head>
@@ -124,16 +134,18 @@ Description : Administrative dashboard for hierarchy view with numbered
 <body>
 
     <div class="container">
-        <h2>👑 王国管理员后台 <span style="font-size: 0.6em; color: #666; font-weight: normal;">Kingdom Admin Dashboard</span>
-        </h2>
-
-        <div class="tabs">
-            <div class="tab active" onclick="switchTab('hierarchy')">全员结构表 / Hierarchy</div>
-            <div class="tab" onclick="switchTab('unbound')">未绑定预警 (≥30M) / Unbound High Power</div>
-            <div class="tab" onclick="switchTab('hidden')">隐藏账号 / Hidden Accounts</div>
+        <div class="header">
+            <h2>👑 王国管理员后台 <span style="font-size: 0.6em; color: #666; font-weight: normal;">Kingdom Admin Dashboard</span></h2>
         </div>
 
-        <div id="hierarchy" class="panel active">
+        <div class="nav-tabs">
+            <button class="tab-btn active" onclick="switchTab('hierarchy')">全员结构表 / Hierarchy</button>
+            <button class="tab-btn" onclick="switchTab('unbound')">未绑定预警 (≥30M) / Unbound High Power</button>
+            <button class="tab-btn" onclick="switchTab('hidden')">隐藏账号 / Hidden Accounts</button>
+        </div>
+
+        <!-- 1. 全员结构表 -->
+        <div id="tab-hierarchy" class="tab-content active card">
             <h3>全员结构表 (按主账号战力排序) / Hierarchy Structure</h3>
             <table>
                 <thead>
@@ -142,126 +154,197 @@ Description : Administrative dashboard for hierarchy view with numbered
                         <th>类型 / Type</th>
                         <th>ID</th>
                         <th>名称 / Name</th>
+                        <th>CH</th>
                         <th>战力 / Power</th>
                         <th>击杀分 / KP</th>
                         <th>操作 / Action</th>
                     </tr>
                 </thead>
                 <tbody id="hierarchy-body">
-                    <tr>
-                        <td colspan="7">加载中... / Loading...</td>
-                    </tr>
+                    <tr><td colspan="8">加载中... / Loading...</td></tr>
                 </tbody>
             </table>
         </div>
 
-        <div id="unbound" class="panel">
-            <h3 style="color: #d9534f;">高战未绑定预警 (战力 ≥ 30M) / Unbound Players Warning</h3>
+        <!-- 2. 未绑定高战预警 -->
+        <div id="tab-unbound" class="tab-content card">
+            <h3>⚠️ 未绑定农场的独立高战玩家 (战力 ≥ 30M) / Unbound High Power</h3>
             <table>
                 <thead>
                     <tr>
-                        <th>编号 / #</th>
                         <th>ID</th>
                         <th>名称 / Name</th>
+                        <th>CH</th>
                         <th>战力 / Power</th>
                         <th>击杀分 / KP</th>
                     </tr>
                 </thead>
-                <tbody id="unbound-body"></tbody>
+                <tbody id="unbound-body">
+                    <tr><td colspan="5">加载中... / Loading...</td></tr>
+                </tbody>
             </table>
         </div>
 
-        <div id="hidden" class="panel">
-            <h3>隐藏账号列表 (系统剔除) / Hidden Accounts</h3>
+        <!-- 3. 隐藏账号列表 -->
+        <div id="tab-hidden" class="tab-content card">
+            <h3>🚫 隐藏账号列表 (Clickable = False) / Hidden Accounts</h3>
             <table>
                 <thead>
                     <tr>
-                        <th>编号 / #</th>
                         <th>ID</th>
                         <th>名称 / Name</th>
+                        <th>CH</th>
                         <th>战力 / Power</th>
                         <th>击杀分 / KP</th>
                     </tr>
                 </thead>
-                <tbody id="hidden-body"></tbody>
+                <tbody id="hidden-body">
+                    <tr><td colspan="5">加载中... / Loading...</td></tr>
+                </tbody>
             </table>
         </div>
     </div>
 
     <script>
-        function switchTab(tabId) {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-            event.target.classList.add('active');
-            document.getElementById(tabId).classList.add('active');
-        }
+        let adminData = null;
 
-        function loadData() {
+        function loadAdminData() {
             fetch('/api/admin/data')
                 .then(res => res.json())
                 .then(data => {
-                    let hiddenHtml = '';
-                    data.hidden.forEach((h, index) => {
-                        hiddenHtml += `<tr><td class="rank">#${index + 1}</td><td>${h.id}</td><td>${h.name}</td><td>${h.power.toLocaleString()}</td><td>${h.kp.toLocaleString()}</td></tr>`;
-                    });
-                    document.getElementById('hidden-body').innerHTML = hiddenHtml || '<tr><td colspan="5">无隐藏账号 / No hidden accounts</td></tr>';
-
-                    let unboundHtml = '';
-                    data.unbound_high.forEach((u, index) => {
-                        unboundHtml += `<tr><td class="rank">#${index + 1}</td><td>${u.id}</td><td>${u.name}</td><td>${u.power.toLocaleString()}</td><td>${u.kp.toLocaleString()}</td></tr>`;
-                    });
-                    document.getElementById('unbound-body').innerHTML = unboundHtml || '<tr><td colspan="5">所有高战均已绑定 / All high-power players bound</td></tr>';
-
-                    let hierarchyHtml = '';
-                    data.hierarchy.forEach((item, index) => {
-                        hierarchyHtml += `
-                        <tr>
-                            <td class="rank">#${index + 1}</td>
-                            <td><span class="badge-main">主号 Main</span></td>
-                            <td><strong>${item.main.id}</strong></td>
-                            <td><strong>${item.main.name}</strong></td>
-                            <td><strong>${item.main.power.toLocaleString()}</strong></td>
-                            <td><strong>${item.main.kp.toLocaleString()}</strong></td>
-                            <td>-</td>
-                        </tr>
-                    `;
-                        item.farms.forEach(f => {
-                            const warningStyle = f.kp_warning ? 'class="kp-warning"' : '';
-                            const warningTag = f.kp_warning ? ' ⚠️ (KP高于主号/High KP)' : '';
-                            hierarchyHtml += `
-                            <tr class="farm-row">
-                                <td></td>
-                                <td><span class="badge-farm">↳ 农场 Farm</span></td>
-                                <td>${f.id}</td>
-                                <td>${f.name}</td>
-                                <td>${f.power.toLocaleString()}</td>
-                                <td ${warningStyle}>${f.kp.toLocaleString()}${warningTag}</td>
-                                <td><button onclick="unbindFarm(${f.id})" class="btn-unbind">解绑 / Unbind</button></td>
-                            </tr>
-                        `;
-                        });
-                    });
-                    document.getElementById('hierarchy-body').innerHTML = hierarchyHtml;
+                    adminData = data;
+                    renderHierarchy(data.hierarchy);
+                    renderUnbound(data.unbound_high);
+                    renderHidden(data.hidden);
                 });
         }
 
+        // 渲染全员结构表
+        function renderHierarchy(hierarchy) {
+            const tbody = document.getElementById('hierarchy-body');
+            tbody.innerHTML = '';
+
+            if (!hierarchy || hierarchy.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8">暂无数据 / No Data</td></tr>';
+                return;
+            }
+
+            let mainIdx = 1;
+            hierarchy.forEach(item => {
+                const m = item.main;
+                // 主账号行
+                tbody.innerHTML += `
+                    <tr class="main-row">
+                        <td>#${mainIdx++}</td>
+                        <td><span style="color:#007bff;">👑 主账号</span></td>
+                        <td>${m.id}</td>
+                        <td>${m.name}</td>
+                        <td><span class="ch-badge">CH ${m.ch || 'N/A'}</span></td>
+                        <td>${Number(m.power).toLocaleString()}</td>
+                        <td>${Number(m.kp).toLocaleString()}</td>
+                        <td>-</td>
+                    </tr>
+                `;
+
+                // 绑定的农场行
+                if (item.farms && item.farms.length > 0) {
+                    item.farms.forEach(f => {
+                        const kpWarn = f.kp_warning ? `<span class="kp-alert"> (⚠️ KP过高)</span>` : '';
+                        tbody.innerHTML += `
+                            <tr class="farm-row">
+                                <td></td>
+                                <td class="farm-indent">└ 🚜 农场号</td>
+                                <td>${f.id}</td>
+                                <td>${f.name}</td>
+                                <td><span class="ch-badge">CH ${f.ch || 'N/A'}</span></td>
+                                <td>${Number(f.power).toLocaleString()}</td>
+                                <td>${Number(f.kp).toLocaleString()}${kpWarn}</td>
+                                <td>
+                                    <button class="btn-sm-danger" onclick="unbindFarm(${f.id})">解绑 / Unbind</button>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                }
+            });
+        }
+
+        // 渲染未绑定高战列表
+        function renderUnbound(unbound) {
+            const tbody = document.getElementById('unbound-body');
+            tbody.innerHTML = '';
+
+            if (!unbound || unbound.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5">无预警账号 / No Warnings</td></tr>';
+                return;
+            }
+
+            unbound.forEach(u => {
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${u.id}</td>
+                        <td><strong>${u.name}</strong></td>
+                        <td><span class="ch-badge">CH ${u.ch || 'N/A'}</span></td>
+                        <td>${Number(u.power).toLocaleString()}</td>
+                        <td>${Number(u.kp).toLocaleString()}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        // 渲染隐藏账号列表
+        function renderHidden(hidden) {
+            const tbody = document.getElementById('hidden-body');
+            tbody.innerHTML = '';
+
+            if (!hidden || hidden.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5">无隐藏账号 / No Hidden Accounts</td></tr>';
+                return;
+            }
+
+            hidden.forEach(h => {
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${h.id}</td>
+                        <td>${h.name}</td>
+                        <td><span class="ch-badge">CH ${h.ch || 'N/A'}</span></td>
+                        <td>${Number(h.power).toLocaleString()}</td>
+                        <td>${Number(h.kp).toLocaleString()}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        // 解绑操作
         function unbindFarm(farmId) {
-            if (!confirm('确定解绑该农场？ / Are you sure to unbind this farm?')) return;
+            if (!confirm(`确定要在后台解绑农场 (ID: ${farmId}) 吗？`)) return;
+
             fetch('/api/unbind', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ farm_id: farmId })
             })
-                .then(res => res.json())
-                .then(data => {
-                    alert(data.msg);
-                    loadData();
-                });
+            .then(res => res.json())
+            .then(data => {
+                alert(data.msg);
+                if (data.status === 'success') {
+                    loadAdminData(); // 重新加载后台表格数据
+                }
+            });
         }
 
-        loadData();
-    </script>
+        // 标签页切换
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
 
+            event.target.classList.add('active');
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+        }
+
+        // 页面加载自动获取后台数据
+        window.onload = loadAdminData;
+    </script>
 </body>
 
 </html>
